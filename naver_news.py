@@ -18,7 +18,9 @@ def news_contents(opener, url):
     soup = BeautifulSoup(html, 'html.parser')
     for br in soup.find_all("br"):
         br.replace_with("\n")
-    contents = soup.select("#articleBodyContents", text=True)[0].text
+    contents = soup.select("#articleBodyContents", text=True)
+    if len(contents) == 0: return []
+    contents = contents[0].text
     # 제거되지 않는 특수문자 제거
     contents = re.sub(r'//.+', '', contents)
     contents = re.sub(r'function.+', '', contents)
