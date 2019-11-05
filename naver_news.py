@@ -7,6 +7,7 @@ from urllib import parse
 from bs4 import BeautifulSoup
 
 
+SEPARATOR = u"\u241D"
 popular_day_url = "https://news.naver.com/main/ranking/popularDay.nhn?rankingType=popular_day&sectionId={}&date={}"
 popular_memo_url = "https://news.naver.com/main/ranking/popularDay.nhn?rankingType=popular_memo&sectionId={}&date={}"
 sections = {'정치':100, '경제':101, '사회':102, '생활문화':103, '세계':104, 'IT과학':105}
@@ -101,7 +102,7 @@ def crawel_new_date(args, news_set, opener, date):
     # 뉴스저장
     if 0 < len(dataset):
         df = pd.DataFrame(data=dataset)
-        df.to_csv(filename, index=False)
+        df.to_csv(filename, sep=SEPARATOR, index=False)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ $ python naver_news.py [--year] [--output] [--sleep]
 * sleep: 혹시나 naver 측에서 ip를 차단 방지를 위한 sleep 입니다 (초단위). 기본값은 0.25초
 
 #### 결과
-* 날짜단위의 yyyy 폴더 아래 yyyymmdd.csv 형태로 날짜별로 저정됩니다.
+* 연도 yyyy 폴더 아래 yyyymmdd.csv 형태로 날짜별로 저정됩니다.
 * 컬럼은 [날짜/뉴스타입/url/제목/내용] 순으로 구성 되어 있습니다.
 * 뉴스타입은 [정치,경제,사회,생활문화,세계,IT과학] 으로 구성 되어 있습ㄴ디ㅏ.
 ```
