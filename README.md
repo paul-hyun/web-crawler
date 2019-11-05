@@ -59,7 +59,7 @@ $ python kowiki.py [--output]
 
 #### 결과
 * 저장폴더/yyyymmdd.csv 형태로 날짜별로 저정됩니다.
-* 컬럼은 [url/제목/내용] 순으로 구성 되어 있습니다.
+* 컬럼은 [id/url/제목/내용] 순으로 구성 되어 있습니다.
 * seperator는 \u241D를 사용 하였습니다.
 ```
 id,url,title,text
