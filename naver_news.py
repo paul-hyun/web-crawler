@@ -24,7 +24,7 @@ OIDS = {
 
 
 """ 뉴스 컨텐츠 조회 """
-def news_contents(opener, news):
+def news_text(opener, news):
     url = news["url"]
     if url.startswith("/"):
         url = f"https://news.naver.com{url}"
@@ -34,14 +34,14 @@ def news_contents(opener, news):
 
     for br in soup.find_all("br"):
         br.replace_with("\n")
-    contents = soup.select("#articleBodyContents", text=True)
-    if len(contents) == 0: return []
-    contents = contents[0].text
+    text = soup.select("#articleBodyContents", text=True)
+    if len(text) == 0: return []
+    text = text[0].text
     # 제거되지 않는 특수문자 제거
-    contents = re.sub(r'//.+', '', contents)
-    contents = re.sub(r'function.+', '', contents)
+    text = re.sub(r'//.+', '', text)
+    text = re.sub(r'function.+', '', text)
     # 라인단위로 나누어 빈 라인은 제거
-    lines = contents.split('\n')
+    lines = text.split('\n')
     values = []
     index = None
     for i, line in enumerate(lines):
@@ -53,8 +53,8 @@ def news_contents(opener, news):
                 index = len(values)
     
     if 0 < len(values) and index is not None:
-        contents = "\n".join(values[:index])
-        news["contents"] = contents
+        text = "\n".join(values[:index])
+        news["text"] = text
         return news
     else: # 본문이 없는 기사
         return None
@@ -120,9 +120,9 @@ def crawel_news_date(args, output, news_set, opener, date):
         # 이미 조회한 경우는 제외 함
         if news_id not in news_set:
             news_set.add(news_id)
-            contents = news_contents(opener, news)
-            if contents:
-                dataset.append(contents)
+            data = news_text(opener, news)
+            if data:
+                dataset.append(data)
             # 네이버 ip 블락 방지용 sleep
             if 0 < args.sleep:
                 time.sleep(args.sleep)
@@ -190,6 +190,4 @@ if __name__ == "__main__":
                 zeros += 1
                 if 6 < zeros:
                     break
-                
-
 
