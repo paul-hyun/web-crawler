@@ -8,10 +8,12 @@
 $ pip install tqdm
 $ pip install pandas
 $ pip install bs4
+$ pip install wget
 ```
 
 ## 네이버뉴스 얼론사별 클롤링
-네이버 뉴스를 언론사별로 크롤링 하는 기능 입니다. 전체 목록을 크롤링 하는경우 동영상뉴스가 많은 부분을 차지하여 노이즈에 가까운 데이터가 수집되기 때문에 언론사별로 수집하도록 하였습니다.
+* 네이버 뉴스를 언론사별로 크롤링 하는 기능 입니다.
+* 전체 목록을 크롤링 하는경우 동영상뉴스가 많은 부분을 차지하여 노이즈에 가까운 데이터가 수집되기 때문에 언론사별로 수집하도록 하였습니다.
 
 ```sh
 $ python naver_news.py --oid <언론사> [--year] [--output] [--sleep]
@@ -26,12 +28,47 @@ $ python naver_news.py --oid <언론사> [--year] [--output] [--sleep]
 #### 결과
 * 저장폴더/언론사/연도/yyyymmdd.csv 형태로 날짜별로 저정됩니다.
 * 컬럼은 [url/제목/내용] 순으로 구성 되어 있습니다.
+* seperator는 \u241D를 사용 하였습니다.
 ```
-url,title,contents
+url,title,text
 /main/ranking/read.nhn?...,"..."
 ...
+```
+* pandas를 이용하면 쉽게 사용할 수 있습니다.
+```
+SEPARATOR = u"\u241D"
+df = pd.read_csv(filename, sep=SEPARATOR, engine="python")
 ```
 
 #### 기타
 * 이미 조회된 파일이 존재하는 경우는 다시 조회하지 않습니다. 다시 조회할 필요가 있을 경우는 해당 날짜의 파일을 삭제 후 실행하세요.
+
+
+
+
+## 한국어 위키 크롤링
+* 위키피디아 한국어 버전을 크롤링 하는 기능 입니다.
+* 위키파싱은 https://github.com/attardi/wikiextractor의 WikiExtractor.py를 사용 했습니다.
+
+```sh
+$ python kowiki.py [--output]
+```
+
+#### 주요옵션
+* output: 위키를 저장할 폴더 입니다. 기본값은 kowiki 입니다.
+
+#### 결과
+* 저장폴더/yyyymmdd.csv 형태로 날짜별로 저정됩니다.
+* 컬럼은 [url/제목/내용] 순으로 구성 되어 있습니다.
+* seperator는 \u241D를 사용 하였습니다.
+```
+id,url,title,text
+5,https://ko.wikipedia.org/wiki?curid=5,"..."
+...
+```
+* pandas를 이용하면 쉽게 사용할 수 있습니다.
+```
+SEPARATOR = u"\u241D"
+df = pd.read_csv(filename, sep=SEPARATOR, engine="python")
+```
 
