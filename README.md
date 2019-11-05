@@ -48,7 +48,7 @@ df = pd.read_csv(filename, sep=SEPARATOR, engine="python")
 
 ## 한국어 위키 크롤링
 * 위키피디아 한국어 버전을 크롤링 하는 기능 입니다.
-* 위키파싱은 [https://github.com/attardi/wikiextractor]의 WikiExtractor.py를 사용 했습니다.
+* 위키파싱은 [wikiextractor](https://github.com/attardi/wikiextractor)의 WikiExtractor.py를 사용 했습니다.
 
 ```sh
 $ python kowiki.py [--output]
