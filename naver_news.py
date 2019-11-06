@@ -168,7 +168,17 @@ def thread_runner(index, args, output, news_set):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--oid", type=str, required=True,
-                        help="뉴스를 조화할 얼론사 입니다. [khan(경향신문), kmib(국민일보), donga(동아일보), munhwa(문화일보), seoul(서울신문), segye(세계일보), chosun(조선일보), joins(중앙일보), hani(한겨레), hankook(한국일보)]")
+                        help="""뉴스를 조화할 얼론사 입니다. 
+khan (경향신문), 
+kmib (국민일보), 
+donga (동아일보), 
+munhwa (문화일보), 
+seoul (서울신문), 
+segye (세계일보), 
+chosun (조선일보), 
+joins (중앙일보), 
+hani (한겨레), 
+hankook (한국일보)]""")
     parser.add_argument("--year", type=int, required=False,
                         help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 오늘부터 2004년 4월 20일까지 크롤링을 합니다.")
     parser.add_argument("--output", default="naver_news", type=str, required=False,
