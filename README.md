@@ -16,13 +16,14 @@ $ pip install wget
 * 전체 목록을 크롤링 하는경우 동영상뉴스가 많은 부분을 차지하여 노이즈에 가까운 데이터가 수집되기 때문에 언론사별로 수집하도록 하였습니다.
 
 ```sh
-$ python naver_news.py --oid <언론사> [--year] [--output] [--sleep]
+$ python naver_news.py --oid <언론사> [--year] [--output] [--threads] [--sleep]
 ```
 
 #### 주요옵션
 * oid: 뉴스를 수집할 언론사 입니다. khan(경향신문), kmib(국민일보), donga(동아일보), munhwa(문화일보), seoul(서울신문), segye(세계일보), chosun(조선일보), joins(중앙일보), hani(한겨레), hankook(한국일보) 하나를 입력하면 됩니다.
 * year: 특정년도의 뉴스를 크롤링 합니다. 입력하지 않으면 오늘부터 2004년 4월 20일까지 크롤링을 합니다.
 * output: 뉴스를 저장할 폴더 입니다. 기본값은 naver_news 입니다.
+* threads: 뉴스를 수집할 쓰레스 개수 입니다. 기본값은 3 입니다.
 * sleep: 혹시나 naver 측에서 ip를 차단 방지를 위한 sleep 입니다 (초단위). 기본값은 0.01초
 
 #### 결과

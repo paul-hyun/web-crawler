@@ -1,5 +1,6 @@
 
-import os, argparse, datetime, time, re
+import os, argparse, datetime, time, re, gzip
+import threading, queue
 from tqdm import tqdm, trange
 import pandas as pd
 import urllib.request as req
@@ -8,7 +9,7 @@ from bs4 import BeautifulSoup
 
 
 SEPARATOR = u"\u241D"
-URL = "https://news.naver.com/main/list.nhn?mode=LPOD&mid=sec&oid={}&listType=title&date={}"
+URL = "https://news.naver.com/main/list.nhn?mode=LPOD&mid=sec&oid={}&listType=title&date={}&page=1"
 OIDS = {
     'khan':'032', # 경향신문
     'kmib':'005', # 국민일보
@@ -21,6 +22,9 @@ OIDS = {
     'hani':'028', # 한겨레
     'hankook':'469' # 한국일보
 }
+DATE_QUEUE = queue.Queue()
+LOCK = threading.Lock()
+ZEROS = 0
 
 
 """ 뉴스 컨텐츠 조회 """
@@ -79,21 +83,26 @@ def news_list_item(url, soup):
 """ 뉴스 페이지 목록 조회 """
 def news_list_page(opener, oid, date, sleep):
     dataset = []
-    url = URL.format(oid, date)
-    html = opener.open(url)
-    soup = BeautifulSoup(html, 'html.parser')
-    pages = soup.select("#main_content > div.paging > a")
-    dataset.extend(news_list_item(url, soup))
-    for page in pages:
-        # 네이버 ip 블락 방지용 sleep
-        if 0 < sleep:
-            time.sleep(sleep)
-        url = page["href"]
-        if url.startswith("?mode="):
-            url = f"https://news.naver.com/main/list.nhn{url}"
+
+    url_set = set()
+    url_set.add(URL.format(oid, date))
+    urls = list(url_set)
+
+    index = 0
+    while index < len(urls):
+        url = urls[index]
         html = opener.open(url)
         soup = BeautifulSoup(html, 'html.parser')
+        if 0 < sleep: time.sleep(sleep)
+        pages = soup.select("#main_content > div.paging > a")
+        for page in pages:
+            url = page["href"]
+            if url.startswith("?mode="): url = f"https://news.naver.com/main/list.nhn{url}"
+            if url not in url_set:
+                url_set.add(url)
+                urls.append(url)
         dataset.extend(news_list_item(url, soup))
+        index += 1
     return dataset
 
 
@@ -103,10 +112,7 @@ def crawel_news_date(args, output, news_set, opener, date):
     filename = f"{dirname}/{date}.csv"
     # 이미 수집된 경우는 수집하지 않음
     if os.path.isfile(filename):
-        return
-    # 폴더가 존재하지 않을경우 생성
-    if not os.path.isdir(dirname):
-        os.makedirs(dirname)
+        return None
     
     # 뉴스 목록 조회
     news_list = news_list_page(opener, OIDS[args.oid], date, args.sleep)
@@ -119,7 +125,11 @@ def crawel_news_date(args, output, news_set, opener, date):
         news_id = f"{query['oid'][0]}.{query['aid'][0]}" # oid, aid로 구성된 구분자
         # 이미 조회한 경우는 제외 함
         if news_id not in news_set:
-            news_set.add(news_id)
+            try:
+                LOCK.acquire()
+                news_set.add(news_id)
+            finally:
+                LOCK.release()
             data = news_text(opener, news)
             if data:
                 dataset.append(data)
@@ -128,9 +138,31 @@ def crawel_news_date(args, output, news_set, opener, date):
                 time.sleep(args.sleep)
     # 뉴스저장
     if 0 < len(dataset):
-        df = pd.DataFrame(data=dataset)
-        df.to_csv(filename, sep=SEPARATOR, index=False)
+        try:
+            LOCK.acquire()
+            # 폴더가 존재하지 않을경우 생성
+            if not os.path.isdir(dirname):
+                os.makedirs(dirname)
+            df = pd.DataFrame(data=dataset)
+            df.to_csv(filename, sep=SEPARATOR, index=False)
+        finally:
+            LOCK.release()
     return len(dataset)
+
+
+""" 스레드 실행 """
+def thread_runner(index, args, output, news_set):
+    global DATE_QUEUE, ZEROS
+
+    # http request
+    opener = req.build_opener()
+
+    while ZEROS < 10 and 0 < DATE_QUEUE.qsize():
+        date = DATE_QUEUE.get()
+        count = crawel_news_date(args, output, news_set, opener, date)
+        if count is not None and 0 < count: ZEROS = 0
+        else: ZEROS += 1
+        print(f"Thread: {index} / Date: {date} / Count: {count} / Remain: {DATE_QUEUE.qsize()}")
 
 
 if __name__ == "__main__":
@@ -141,6 +173,8 @@ if __name__ == "__main__":
                         help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 오늘부터 2004년 4월 20일까지 크롤링을 합니다.")
     parser.add_argument("--output", default="naver_news", type=str, required=False,
                         help="뉴스를 저장할 폴더 입니다.")
+    parser.add_argument("--threads", default="3", type=int, required=False,
+                        help="동시에 실행할 Thread 개수")
     parser.add_argument("--sleep", default="0.01", type=float, required=False,
                         help="네이버 ip 블락 방지용 sleep")
     args = parser.parse_args()
@@ -168,26 +202,14 @@ if __name__ == "__main__":
         os.makedirs(output)
 
     # 조회할 데이터 목록 생성
-    dates = []
     while start_date >= end_date:
-        dates.append(start_date.strftime("%Y%m%d"))
+        DATE_QUEUE.put(start_date.strftime("%Y%m%d"))
         start_date -= datetime.timedelta(days=1)
-    
-    # http request
-    opener = req.build_opener()
+
     # crawlled news set
     news_set = set()
 
-    zeros = 0
-    with tqdm(total=len(dates), desc=f"Crawlling") as pbar:
-        for i, date in enumerate(dates):
-            pbar.set_postfix_str(f"date: {date}")
-            count = crawel_news_date(args, output, news_set, opener, date)
-            pbar.update(1)
-            if 0 < count:
-                zeros = 0
-            else:
-                zeros += 1
-                if 6 < zeros:
-                    break
+    for index in range(args.threads):
+        thread = threading.Thread(target=thread_runner, args=(index, args, output, news_set))
+        thread.start()
 
