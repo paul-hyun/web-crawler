@@ -1,33 +1,99 @@
 
-import os, argparse, datetime, time, re, gzip
+import sys, os, argparse, datetime, time, re, collections
+import logging
+from logging import handlers
+logger = logging.getLogger()
 import threading, queue
 from tqdm import tqdm, trange
+import csv
 import pandas as pd
 import urllib.request as req
 from urllib import parse
+import bs4
 from bs4 import BeautifulSoup
 
 
 SEPARATOR = u"\u241D"
-URL = "https://news.naver.com/main/list.nhn?mode=LPOD&mid=sec&oid={}&listType=title&date={}&page=1"
-OIDS = {
-    'khan':'032', # 경향신문
-    'kmib':'005', # 국민일보
-    'donga':'020', # 동아일보
-    'munhwa':'021', # 문화일보
-    'seoul':'081', # 서울신문
-    'segye':'022', # 세계일보
-    'chosun':'023', # 조선일보
-    'joins':'025', # 중앙일보
-    'hani':'028', # 한겨레
-    'hankook':'469' # 한국일보
-}
+URL = "https://news.naver.com/main/list.nhn?mode=LS2D&mid=shm&sid1={}&sid2={}&date={}&page={}"
+SID = [
+    {'sid1': '100', 'sid2': '264', 'name1': '정치', 'name2': '청와대'}, 
+    {'sid1': '100', 'sid2': '265', 'name1': '정치', 'name2': '국회/정당'}, 
+    {'sid1': '100', 'sid2': '268', 'name1': '정치', 'name2': '북한'}, 
+    {'sid1': '100', 'sid2': '266', 'name1': '정치', 'name2': '행정'}, 
+    {'sid1': '100', 'sid2': '267', 'name1': '정치', 'name2': '국방/외교'}, 
+    {'sid1': '100', 'sid2': '269', 'name1': '정치', 'name2': '정치일반'}, 
+    {'sid1': '101', 'sid2': '259', 'name1': '경제', 'name2': '금융'}, 
+    {'sid1': '101', 'sid2': '258', 'name1': '경제', 'name2': '증권'}, 
+    {'sid1': '101', 'sid2': '261', 'name1': '경제', 'name2': '산업/재계'}, 
+    {'sid1': '101', 'sid2': '771', 'name1': '경제', 'name2': '중기/벤처'}, 
+    {'sid1': '101', 'sid2': '260', 'name1': '경제', 'name2': '부동산'}, 
+    {'sid1': '101', 'sid2': '262', 'name1': '경제', 'name2': '글로벌 경제'}, 
+    {'sid1': '101', 'sid2': '310', 'name1': '경제', 'name2': '생활경제'}, 
+    {'sid1': '101', 'sid2': '263', 'name1': '경제', 'name2': '경제 일반'}, 
+    {'sid1': '102', 'sid2': '249', 'name1': '사회', 'name2': '사건사고'}, 
+    {'sid1': '102', 'sid2': '250', 'name1': '사회', 'name2': '교육'}, 
+    {'sid1': '102', 'sid2': '251', 'name1': '사회', 'name2': '노동'}, 
+    {'sid1': '102', 'sid2': '254', 'name1': '사회', 'name2': '언론'}, 
+    {'sid1': '102', 'sid2': '252', 'name1': '사회', 'name2': '환경'}, 
+    {'sid1': '102', 'sid2': '59b', 'name1': '사회', 'name2': '인권/복지'}, 
+    {'sid1': '102', 'sid2': '255', 'name1': '사회', 'name2': '식품/의료'}, 
+    {'sid1': '102', 'sid2': '256', 'name1': '사회', 'name2': '지역'}, 
+    {'sid1': '102', 'sid2': '276', 'name1': '사회', 'name2': '인물'}, 
+    {'sid1': '102', 'sid2': '257', 'name1': '사회', 'name2': '사회 일반'}, 
+    {'sid1': '103', 'sid2': '241', 'name1': '생활문화', 'name2': '건강정보'}, 
+    {'sid1': '103', 'sid2': '239', 'name1': '생활문화', 'name2': '자동차/시승기'}, 
+    {'sid1': '103', 'sid2': '240', 'name1': '생활문화', 'name2': '도로/교통'}, 
+    {'sid1': '103', 'sid2': '237', 'name1': '생활문화', 'name2': '여행/레저'}, 
+    {'sid1': '103', 'sid2': '238', 'name1': '생활문화', 'name2': '음식/맛집'}, 
+    {'sid1': '103', 'sid2': '376', 'name1': '생활문화', 'name2': '패션/뷰티'}, 
+    {'sid1': '103', 'sid2': '242', 'name1': '생활문화', 'name2': '공연/전시'}, 
+    {'sid1': '103', 'sid2': '243', 'name1': '생활문화', 'name2': '책'}, 
+    {'sid1': '103', 'sid2': '244', 'name1': '생활문화', 'name2': '종교'}, 
+    {'sid1': '103', 'sid2': '248', 'name1': '생활문화', 'name2': '날씨'}, 
+    {'sid1': '103', 'sid2': '245', 'name1': '생활문화', 'name2': '생활문화 일반'}, 
+    {'sid1': '104', 'sid2': '231', 'name1': '세계', 'name2': '아시아/호주'}, 
+    {'sid1': '104', 'sid2': '232', 'name1': '세계', 'name2': '미국/중남미'}, 
+    {'sid1': '104', 'sid2': '233', 'name1': '세계', 'name2': '유럽'}, 
+    {'sid1': '104', 'sid2': '234', 'name1': '세계', 'name2': '중동/아프리카'}, 
+    {'sid1': '104', 'sid2': '322', 'name1': '세계', 'name2': '세계 일반'}, 
+    {'sid1': '105', 'sid2': '731', 'name1': 'IT/과학', 'name2': '모바일'}, 
+    {'sid1': '105', 'sid2': '226', 'name1': 'IT/과학', 'name2': '인터넷/SNS'}, 
+    {'sid1': '105', 'sid2': '227', 'name1': 'IT/과학', 'name2': '통신/뉴미디어'}, 
+    {'sid1': '105', 'sid2': '230', 'name1': 'IT/과학', 'name2': 'IT 일반'}, 
+    {'sid1': '105', 'sid2': '732', 'name1': 'IT/과학', 'name2': '보안/해킹'}, 
+    {'sid1': '105', 'sid2': '283', 'name1': 'IT/과학', 'name2': '컴퓨터'}, 
+    {'sid1': '105', 'sid2': '229', 'name1': 'IT/과학', 'name2': '게임/리뷰'}, 
+    {'sid1': '105', 'sid2': '228', 'name1': 'IT/과학', 'name2': '과학 일반'},
+]
+
 DATE_QUEUE = queue.Queue()
 LOCK = threading.Lock()
-ZEROS = 0
+newliles = {
+    "br", "div", "p"
+}
+
+""" html을 텍스트 형태로 변환 """
+def html_to_text(soup):
+    for s in soup("script"): # script 제거
+        s.extract()
+    for s in soup("img"): # image 제거
+        s.extract()
+    for s in soup("iframe"): # iframe 제거
+        s.extract()
+
+    lines = []
+    line = []
+    for s in soup.descendants:
+        if type(s) == bs4.element.NavigableString:
+            text = s.strip()
+            if 0 < len(text): line.append(text)
+        elif s.name in newliles and 0 < len(line):
+            lines.append("".join(line).strip())
+            line = []
+    return "\n".join(lines)
 
 
-""" 뉴스 컨텐츠 조회 """
+""" 뉴스 텍스트 조회 """
 def news_text(opener, news):
     url = news["url"]
     if url.startswith("/"):
@@ -36,58 +102,37 @@ def news_text(opener, news):
     html = opener.open(url)
     soup = BeautifulSoup(html, 'html.parser')
 
-    for br in soup.find_all("br"):
-        br.replace_with("\n")
-    text = soup.select("#articleBodyContents", text=True)
-    if len(text) == 0: return []
-    text = text[0].text
-    # 제거되지 않는 특수문자 제거
-    text = re.sub(r'//.+', '', text)
-    text = re.sub(r'function.+', '', text)
-    # 라인단위로 나누어 빈 라인은 제거
-    lines = text.split('\n')
-    values = []
-    index = None
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if line:
-            values.append(line)
-            # 다. 형태로 끝나는 부분을 끝으로 인식
-            if line.endswith("다."):
-                index = len(values)
-    
-    if 0 < len(values) and index is not None:
-        text = "\n".join(values[:index])
-        news["text"] = text
-        return news
-    else: # 본문이 없는 기사
-        return None
+    articleBodyContents = soup.select("#articleBodyContents")
+    if len(articleBodyContents) == 0: news["text"] = ""
+    else: news["text"] = html_to_text(articleBodyContents[0])
+    return news
 
 
 """ 뉴스 페이지 목록 조회 """
-def news_list_item(url, soup):
+def news_list_item(soup):
     dataset = []
-    items = soup.select("#main_content > div.list_body.newsflash_body > div.newspaper_area > ul > li > dl > dt > a")
+    items = soup.select("#main_content > div.list_body.newsflash_body > ul > li > dl > dt[class!='photo'] > a")
     for item in items:
         url, title = item["href"], item.text.strip()
         if 0 < len(title):
-            dataset.append({"url": item["href"], "title": title})
-    items = soup.select("#main_content > div.list_body.newsflash_body > ul[class='type02'] > li > a")
-    for item in items:
-        url, title = item["href"], item.text.strip()
-        if 0 < len(title):
-            dataset.append({"url": item["href"], "title": title})
+            dataset.append({"url": url, "title": title})
+        elif not list_url.endswith("&page=1"):
+            logger.warn(f"zero length: {list_url} : {item}")
     return dataset
 
 
 """ 뉴스 페이지 목록 조회 """
-def news_list_page(opener, oid, date, sleep):
+def news_list_page(opener, date, sleep):
+    keys = set()
+    urls = []
+    for sid in SID:
+        sid1, sid2, page = sid["sid1"], sid["sid2"], "1"
+        key = f"{sid1}.{sid2}.{page}"
+        if key not in keys:
+            keys.add(key)
+            urls.append(URL.format(sid1, sid2, date, page))
+
     dataset = []
-
-    url_set = set()
-    url_set.add(URL.format(oid, date))
-    urls = list(url_set)
-
     index = 0
     while index < len(urls):
         url = urls[index]
@@ -96,12 +141,16 @@ def news_list_page(opener, oid, date, sleep):
         if 0 < sleep: time.sleep(sleep)
         pages = soup.select("#main_content > div.paging > a")
         for page in pages:
-            url = page["href"]
-            if url.startswith("?mode="): url = f"https://news.naver.com/main/list.nhn{url}"
-            if url not in url_set:
-                url_set.add(url)
-                urls.append(url)
-        dataset.extend(news_list_item(url, soup))
+            page_url = page["href"]
+            query = parse.parse_qs(parse.urlparse(page_url).query)
+            sid1, sid2, page = query["sid1"][0], query["sid2"][0], query["page"][0]
+            key = f"{sid1}.{sid2}.{page}"
+            if key not in keys:
+                keys.add(key)
+                urls.append(URL.format(sid1, sid2, date, page))
+        items = news_list_item(soup)
+        dataset.extend(items)
+        # logger.info(f"Url: {url} / Items: {len(items):2d}")           
         index += 1
     return dataset
 
@@ -115,11 +164,11 @@ def crawel_news_date(args, output, news_set, opener, date):
         return None
     
     # 뉴스 목록 조회
-    news_list = news_list_page(opener, OIDS[args.oid], date, args.sleep)
+    news_list = news_list_page(opener, date, args.sleep)
 
     # 뉴스 내용 조회
     dataset = []
-    for news in news_list:
+    for i, news in enumerate(news_list):
         url = news["url"]
         query = parse.parse_qs(parse.urlparse(url).query)
         news_id = f"{query['oid'][0]}.{query['aid'][0]}" # oid, aid로 구성된 구분자
@@ -152,44 +201,30 @@ def crawel_news_date(args, output, news_set, opener, date):
 
 """ 스레드 실행 """
 def thread_runner(index, args, output, news_set):
-    global DATE_QUEUE, ZEROS
+    global DATE_QUEUE
 
     # http request
     opener = req.build_opener()
 
-    while ZEROS < 10 and 0 < DATE_QUEUE.qsize():
+    zeros = 0
+    while zeros < 5 and 0 < DATE_QUEUE.qsize():
         date = DATE_QUEUE.get()
-        count = crawel_news_date(args, output, news_set, opener, date)
-        if count is not None and 0 < count: ZEROS = 0
-        else: ZEROS += 1
-        print(f"Thread: {index} / Date: {date} / Count: {count} / Remain: {DATE_QUEUE.qsize()}")
+        try:
+            time_start = datetime.datetime.now()
+            count = crawel_news_date(args, output, news_set, opener, date)
+            if count is not None:
+                if 0 < count: zeros = 0
+                else: zeros += 1
+                time_end = datetime.datetime.now()
+                duration = time_end - time_start
+                logger.info(f"Thread: {index:2d} / Date: {date} / Count: {count:4d} / Time: {duration.total_seconds():6.2f} / Remain: {DATE_QUEUE.qsize():5d}")
+        except Exception as ex:
+            logger.info(f"Thread: {index:2d} / Date: {date} / Exception: {ex} / Remain: {DATE_QUEUE.qsize():5d}")           
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--oid", type=str, required=True,
-                        help="""뉴스를 조화할 얼론사 입니다. 
-khan (경향신문), 
-kmib (국민일보), 
-donga (동아일보), 
-munhwa (문화일보), 
-seoul (서울신문), 
-segye (세계일보), 
-chosun (조선일보), 
-joins (중앙일보), 
-hani (한겨레), 
-hankook (한국일보)]""")
-    parser.add_argument("--year", type=int, required=False,
-                        help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 오늘부터 2004년 4월 20일까지 크롤링을 합니다.")
-    parser.add_argument("--output", default="naver_news", type=str, required=False,
-                        help="뉴스를 저장할 폴더 입니다.")
-    parser.add_argument("--threads", default="3", type=int, required=False,
-                        help="동시에 실행할 Thread 개수")
-    parser.add_argument("--sleep", default="0.01", type=float, required=False,
-                        help="네이버 ip 블락 방지용 sleep")
-    args = parser.parse_args()
-
-    assert args.oid in OIDS
+""" 분류별 뉴스 수집 """
+def crawel_news(args):
+    csv.field_size_limit(sys.maxsize)
 
     max_date = datetime.datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     max_date = max_date - datetime.timedelta(days=1)
@@ -206,7 +241,7 @@ hankook (한국일보)]""")
         end_date = min_date
     assert start_date > end_date
 
-    output = f"{args.output}/{args.oid}"
+    output = f"{args.output}"
     # 뉴스를 저장할 폴더 생성
     if not os.path.isdir(output):
         os.makedirs(output)
@@ -222,4 +257,30 @@ hankook (한국일보)]""")
     for index in range(args.threads):
         thread = threading.Thread(target=thread_runner, args=(index, args, output, news_set))
         thread.start()
+        time.sleep(0.1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--year", type=int, required=False,
+                        help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 오늘부터 2000년 1월 1일까지 크롤링을 합니다.")
+    parser.add_argument("--output", default="naver_news", type=str, required=False,
+                        help="뉴스를 저장할 폴더 입니다.")
+    parser.add_argument("--threads", default="3", type=int, required=False,
+                        help="동시에 실행할 Thread 개수")
+    parser.add_argument("--sleep", default="0.01", type=float, required=False,
+                        help="초단위 슬립 sleep")
+    args = parser.parse_args()
+
+    if not os.path.exists("log"):
+        os.makedirs("log")
+    
+    logger.setLevel(logging.INFO)
+
+    log_handler = handlers.TimedRotatingFileHandler(filename="log/naver_news.log", when="midnight", interval=1, encoding="utf-8")
+    log_handler.suffix = "%Y%m%d"
+    log_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)8s | %(message)s"))
+    logger.addHandler(log_handler)
+
+    crawel_news(args)
 
