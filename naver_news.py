@@ -68,6 +68,7 @@ SID = [
 
 DATE_QUEUE = queue.Queue()
 LOCK = threading.Lock()
+THREAD_STATUE = {}
 newliles = {
     "br", "div", "p"
 }
@@ -122,7 +123,7 @@ def news_list_item(soup):
 
 
 """ 뉴스 페이지 목록 조회 """
-def news_list_page(opener, date, sleep):
+def news_list_page(t_id, opener, date, sleep):
     keys = set()
     urls = []
     for sid in SID:
@@ -150,13 +151,18 @@ def news_list_page(opener, date, sleep):
                 urls.append(URL.format(sid1, sid2, date, page))
         items = news_list_item(soup)
         dataset.extend(items)
+        try:
+            LOCK.acquire()
+            THREAD_STATUE[str(t_id)] = f"{date}({0:5d}/{len(dataset):5d})"
+        finally:
+            LOCK.release()
         # logger.info(f"Url: {url} / Items: {len(items):2d}")           
         index += 1
     return dataset
 
 
 """ 날짜별로 뉴스 조회 및 저장 """
-def crawel_news_date(args, output, news_set, opener, date):
+def crawel_news_date(t_id, args, output, news_set, opener, date):
     dirname = f"{output}/{date[:4]}"
     filename = f"{dirname}/{date}.csv"
     # 이미 수집된 경우는 수집하지 않음
@@ -164,8 +170,8 @@ def crawel_news_date(args, output, news_set, opener, date):
         return None
     
     # 뉴스 목록 조회
-    news_list = news_list_page(opener, date, args.sleep)
-
+    news_list = news_list_page(t_id, opener, date, args.sleep)
+ 
     # 뉴스 내용 조회
     dataset = []
     for i, news in enumerate(news_list):
@@ -177,6 +183,7 @@ def crawel_news_date(args, output, news_set, opener, date):
             try:
                 LOCK.acquire()
                 news_set.add(news_id)
+                THREAD_STATUE[str(t_id)] = f"{date}({i:5d}/{len(news_list):5d})"
             finally:
                 LOCK.release()
             data = news_text(opener, news)
@@ -200,7 +207,7 @@ def crawel_news_date(args, output, news_set, opener, date):
 
 
 """ 스레드 실행 """
-def thread_runner(index, args, output, news_set):
+def thread_runner(t_id, args, output, news_set):
     global DATE_QUEUE
 
     # http request
@@ -211,15 +218,15 @@ def thread_runner(index, args, output, news_set):
         date = DATE_QUEUE.get()
         try:
             time_start = datetime.datetime.now()
-            count = crawel_news_date(args, output, news_set, opener, date)
+            count = crawel_news_date(t_id, args, output, news_set, opener, date)
             if count is not None:
                 if 0 < count: zeros = 0
                 else: zeros += 1
                 time_end = datetime.datetime.now()
                 duration = time_end - time_start
-                logger.info(f"Thread: {index:2d} / Date: {date} / Count: {count:4d} / Time: {duration.total_seconds():6.2f} / Remain: {DATE_QUEUE.qsize():5d}")
+                logger.info(f"Thread: {t_id:2d} / Date: {date} / Count: {count:4d} / Time: {duration.total_seconds():6.2f} / Remain: {DATE_QUEUE.qsize():5d}")
         except Exception as ex:
-            logger.info(f"Thread: {index:2d} / Date: {date} / Exception: {ex} / Remain: {DATE_QUEUE.qsize():5d}")           
+            logger.info(f"Thread: {t_id:2d} / Date: {date} / Exception: {ex} / Remain: {DATE_QUEUE.qsize():5d}")           
 
 
 """ 분류별 뉴스 수집 """
@@ -254,10 +261,14 @@ def crawel_news(args):
     # crawlled news set
     news_set = set()
 
-    for index in range(args.threads):
-        thread = threading.Thread(target=thread_runner, args=(index, args, output, news_set))
+    for t_id in range(args.threads):
+        thread = threading.Thread(target=thread_runner, args=(t_id, args, output, news_set))
         thread.start()
         time.sleep(0.1)
+    
+    while True:
+        print(THREAD_STATUE, end="\r")
+        time.sleep(10)
 
 
 if __name__ == "__main__":
