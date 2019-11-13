@@ -117,8 +117,8 @@ def news_list_item(soup):
         url, title = item["href"], item.text.strip()
         if 0 < len(title):
             dataset.append({"url": url, "title": title})
-        elif not list_url.endswith("&page=1"):
-            logger.warn(f"zero length: {list_url} : {item}")
+        elif not url.endswith("&page=1"):
+            logger.warn(f"zero length: {url} : {item}")
     return dataset
 
 
