@@ -67,7 +67,6 @@ SID = [
 ]
 
 DATE_QUEUE = queue.Queue()
-LOCK = threading.Lock()
 THREAD_STATUE = {}
 newliles = {
     "br", "div", "p"
@@ -151,11 +150,8 @@ def news_list_page(t_id, opener, date, sleep):
                 urls.append(URL.format(sid1, sid2, date, page))
         items = news_list_item(soup)
         dataset.extend(items)
-        try:
-            LOCK.acquire()
-            THREAD_STATUE[str(t_id)] = f"{date}({0:5d}/{len(dataset):5d})"
-        finally:
-            LOCK.release()
+
+        THREAD_STATUE[str(t_id)] = f"{date}({0:5d}/{len(dataset):5d})"
         # logger.info(f"Url: {url} / Items: {len(items):2d}")           
         index += 1
     return dataset
@@ -178,36 +174,30 @@ def crawel_news_date(t_id, args, output, news_set, opener, date):
         url = news["url"]
         query = parse.parse_qs(parse.urlparse(url).query)
         news_id = f"{query['oid'][0]}.{query['aid'][0]}" # oid, aid로 구성된 구분자
-        # 이미 조회한 경우는 제외 함
-        if news_id not in news_set:
-            try:
-                LOCK.acquire()
-                news_set.add(news_id)
-                THREAD_STATUE[str(t_id)] = f"{date}({i:5d}/{len(news_list):5d})"
-            finally:
-                LOCK.release()
-            data = news_text(opener, news)
-            if data:
-                dataset.append(data)
-            # 네이버 ip 블락 방지용 sleep
-            if 0 < args.sleep:
-                time.sleep(args.sleep)
+        
+        # 쓰레드 상태 저장
+        THREAD_STATUE[str(t_id)] = f"{date}({i:5d}/{len(news_list):5d})"
+
+        # 뉴스 본문 조회
+        data = news_text(opener, news)
+        if data:
+            dataset.append(data)
+        # 네이버 ip 블락 방지용 sleep
+        if 0 < args.sleep:
+            time.sleep(args.sleep)
+
     # 뉴스저장
     if 0 < len(dataset):
-        try:
-            LOCK.acquire()
-            # 폴더가 존재하지 않을경우 생성
-            if not os.path.isdir(dirname):
-                os.makedirs(dirname)
-            df = pd.DataFrame(data=dataset)
-            df.to_csv(filename, sep=SEPARATOR, index=False)
-        finally:
-            LOCK.release()
+        # 폴더가 존재하지 않을경우 생성
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname)
+        df = pd.DataFrame(data=dataset)
+        df.to_csv(filename, sep=SEPARATOR, index=False)
     return len(dataset)
 
 
 """ 스레드 실행 """
-def thread_runner(t_id, args, output, news_set):
+def thread_runner(t_id, args, output):
     global DATE_QUEUE
 
     # http request
@@ -218,7 +208,7 @@ def thread_runner(t_id, args, output, news_set):
         date = DATE_QUEUE.get()
         try:
             time_start = datetime.datetime.now()
-            count = crawel_news_date(t_id, args, output, news_set, opener, date)
+            count = crawel_news_date(t_id, args, output, opener, date)
             if count is not None:
                 if 0 < count: zeros = 0
                 else: zeros += 1
@@ -258,11 +248,8 @@ def crawel_news(args):
         DATE_QUEUE.put(start_date.strftime("%Y%m%d"))
         start_date -= datetime.timedelta(days=1)
 
-    # crawlled news set
-    news_set = set()
-
     for t_id in range(args.threads):
-        thread = threading.Thread(target=thread_runner, args=(t_id, args, output, news_set))
+        thread = threading.Thread(target=thread_runner, args=(t_id, args, output))
         thread.start()
         time.sleep(0.1)
     
