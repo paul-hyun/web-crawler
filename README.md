@@ -22,9 +22,12 @@ $ python naver_news.py [--year] [--output] [--threads] [--sleep]
 * year: 특정년도의 뉴스를 크롤링 합니다. 입력하지 않으면 오늘부터 2004년 4월 20일까지 크롤링을 합니다.
 * output: 뉴스를 저장할 폴더 입니다. 기본값은 naver_news 입니다.
 * threads: 뉴스를 수집할 쓰레스 개수 입니다. 기본값은 3 입니다.
-* sleep: 혹시나 naver 측에서 ip를 차단 방지를 위한 sleep 입니다 (초단위). 기본값은 0.01초
+* sleep: web request 완료 후 sleep 입니다 (초단위). 기본값은 0.01초
+
 
 #### 결과
+* 진행중 상태는 각 thread 별로 {thread_id: date(complete/total)} 형태로 표현 됩니다.
+* {'0': '20191112(    0/ 2047)', '1': '20191111(    0/ 2144)', '2': '20191018(    0/ 2100)'}
 * 저장폴더/연도/yyyymmdd.csv 형태로 날짜별로 저정됩니다.
 * 컬럼은 [url/제목/내용] 순으로 구성 되어 있습니다.
 * seperator는 \u241D를 사용 하였습니다.
