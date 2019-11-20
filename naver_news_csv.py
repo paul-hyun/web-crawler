@@ -151,7 +151,7 @@ def news_list_page(t_id, opener, date, sleep):
         items = news_list_item(soup)
         dataset.extend(items)
 
-        THREAD_STATUE[str(t_id)] = f"{date}({0:5d}/{len(dataset):5d})"
+        THREAD_STATUE[t_id] = f"{date}({0:5d}/{len(dataset):5d})"
         # logger.info(f"Url: {url} / Items: {len(items):2d}")           
         index += 1
     return dataset
@@ -174,17 +174,18 @@ def crawel_news_date(t_id, args, output, news_set, opener, date):
         url = news["url"]
         query = parse.parse_qs(parse.urlparse(url).query)
         news_id = f"{query['oid'][0]}.{query['aid'][0]}" # oid, aid로 구성된 구분자
-        
-        # 쓰레드 상태 저장
-        THREAD_STATUE[str(t_id)] = f"{date}({i:5d}/{len(news_list):5d})"
 
-        # 뉴스 본문 조회
-        data = news_text(opener, news)
-        if data:
-            dataset.append(data)
-        # 네이버 ip 블락 방지용 sleep
-        if 0 < args.sleep:
-            time.sleep(args.sleep)
+        if news_id not in news_set:
+            news_set.add(news_id)       
+            # 쓰레드 상태 저장
+            THREAD_STATUE[t_id] = f"{date}({i:5d}/{len(news_list):5d})"
+            # 뉴스 본문 조회
+            data = news_text(opener, news)
+            if data:
+                dataset.append(data)
+            # 네이버 ip 블락 방지용 sleep
+            if 0 < args.sleep:
+                time.sleep(args.sleep)
 
     # 뉴스저장
     if 0 < len(dataset):
@@ -197,8 +198,9 @@ def crawel_news_date(t_id, args, output, news_set, opener, date):
 
 
 """ 스레드 실행 """
-def thread_runner(t_id, args, output):
+def thread_runner(t_id, args, output, news_set):
     global DATE_QUEUE
+    THREAD_STATUE[t_id] = ""
 
     # http request
     opener = req.build_opener()
@@ -208,7 +210,7 @@ def thread_runner(t_id, args, output):
         date = DATE_QUEUE.get()
         try:
             time_start = datetime.datetime.now()
-            count = crawel_news_date(t_id, args, output, opener, date)
+            count = crawel_news_date(t_id, args, output, news_set, opener, date)
             if count is not None:
                 if 0 < count: zeros = 0
                 else: zeros += 1
@@ -216,7 +218,10 @@ def thread_runner(t_id, args, output):
                 duration = time_end - time_start
                 logger.info(f"Thread: {t_id:2d} / Date: {date} / Count: {count:4d} / Time: {duration.total_seconds():6.2f} / Remain: {DATE_QUEUE.qsize():5d}")
         except Exception as ex:
-            logger.info(f"Thread: {t_id:2d} / Date: {date} / Exception: {ex} / Remain: {DATE_QUEUE.qsize():5d}")           
+            print(traceback.format_exc())
+            logger.info(f"Thread: {t_id:2d} / Date: {date} / Exception: {ex} / Remain: {DATE_QUEUE.qsize():5d}")
+    
+    del THREAD_STATUE[t_id]
 
 
 """ 분류별 뉴스 수집 """
@@ -247,21 +252,24 @@ def crawel_news(args):
     while start_date >= end_date:
         DATE_QUEUE.put(start_date.strftime("%Y%m%d"))
         start_date -= datetime.timedelta(days=1)
+    
+    # crawlled news set
+    news_set = set()
 
     for t_id in range(args.threads):
-        thread = threading.Thread(target=thread_runner, args=(t_id, args, output))
+        thread = threading.Thread(target=thread_runner, args=(t_id, args, output, news_set))
         thread.start()
         time.sleep(0.1)
     
-    while True:
-        print(THREAD_STATUE, end="\r")
+    while 0 < len(THREAD_STATUE):
         time.sleep(10)
+        print(THREAD_STATUE, end="\r")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--year", type=int, required=False,
-                        help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 오늘부터 2000년 1월 1일까지 크롤링을 합니다.")
+                        help="뉴스를 크롤링 연도를 입력 합니다. 입력하지 않음면 어제부터 2000년 1월 1일까지 크롤링을 합니다.")
     parser.add_argument("--output", default="naver_news", type=str, required=False,
                         help="뉴스를 저장할 폴더 입니다.")
     parser.add_argument("--threads", default="3", type=int, required=False,
@@ -275,7 +283,7 @@ if __name__ == "__main__":
     
     logger.setLevel(logging.INFO)
 
-    log_handler = handlers.TimedRotatingFileHandler(filename="log/naver_news.log", when="midnight", interval=1, encoding="utf-8")
+    log_handler = handlers.TimedRotatingFileHandler(filename="log/naver_news_csv.log", when="midnight", interval=1, encoding="utf-8")
     log_handler.suffix = "%Y%m%d"
     log_handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)8s | %(message)s"))
     logger.addHandler(log_handler)
