@@ -9,13 +9,14 @@ $ pip install tqdm
 $ pip install pandas
 $ pip install bs4
 $ pip install wget
+$ pip install pymongo
 ```
 
-## 네이버뉴스 클롤링
-* 네이버 뉴스를 크롤링 하는 기능 입니다.
+## 네이버뉴스 클롤링 (CSV)
+* 네이버 뉴스를 크롤링 해서 CSV 파일 형식으로 저장 기능 입니다.
 
 ```sh
-$ python naver_news.py [--year] [--output] [--threads] [--sleep]
+$ python naver_news_csv.py [--year] [--output] [--threads] [--sleep]
 ```
 
 #### 주요옵션
@@ -49,7 +50,7 @@ df = pd.read_csv(filename, sep=SEPARATOR, engine="python")
 
 
 
-## 한국어 위키 크롤링
+## 한국어 위키 크롤링 (CSV)
 * 위키피디아 한국어 버전을 크롤링 하는 기능 입니다.
 * 위키파싱은 [wikiextractor](https://github.com/attardi/wikiextractor)의 WikiExtractor.py를 사용 했습니다.
 
@@ -67,6 +68,35 @@ $ python kowiki.py [--output]
 ```
 id,url,title,text
 5,https://ko.wikipedia.org/wiki?curid=5,"..."
+...
+```
+* pandas를 이용하면 쉽게 사용할 수 있습니다.
+```
+csv.field_size_limit(sys.maxsize)
+SEPARATOR = u"\u241D"
+df = pd.read_csv(filename, sep=SEPARATOR, engine="python")
+```
+
+
+## STACKOVEFLOW (CSV)
+* stackoverflow 데이터를 크롤링 해서 CSV 파일 형식으로 저장 기능 입니다.
+
+```sh
+$ python stackoverflow.py [--output] [--tag] [--sleep]
+```
+
+#### 주요옵션
+* output: 크로링 데이터를 저장할 폴더 입니다. 기본값은 stackoverflow 입니다.
+* tag: 크롤링 할 stackoverflow tag 입니다. 기본값은 deep-learning 입니다.
+* sleep: web request 완료 후 sleep 입니다 (초단위). 기본값은 0.01초
+
+
+#### 결과
+* 저장폴더/tag.csv 형태로 저정됩니다.
+* 컬럼은 [votes/answer/title/url/overview/tags/act_time/user_img/user_id/user_home] 순으로 구성 되어 있습니다.
+* seperator는 \u241D를 사용 하였습니다.
+```
+votes/answer/title/url/overview/tags/act_time/user_img/user_id/user_home
 ...
 ```
 * pandas를 이용하면 쉽게 사용할 수 있습니다.
